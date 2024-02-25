@@ -8,12 +8,12 @@ from subprocess import (
     CREATE_NEW_PROCESS_GROUP,
     CREATE_NEW_CONSOLE
 )
-from typing import Any
+from typing import Any, Optional
 import logging
 
 logger = logging.getLogger()
 
-popen_instance = None
+popen_instance: Optional[PopenWindowsAsLogon] = None
 
 def run() -> None:
     global popen_instance

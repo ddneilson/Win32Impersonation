@@ -14,7 +14,8 @@ import socket
 
 import concurrent.futures
 import logging
-from subproc_test import run, popen_instance
+import subproc_test
+from subproc_test import run
 
 logger = logging.getLogger()
 
@@ -68,13 +69,16 @@ class OpenJDService(win32serviceutil.ServiceFramework):
             logger.info("Polling...")
             if not win32event.WaitForSingleObject(self.stop_event, 1000):
                 logger.info("Stop event recieved!")
-                popen_instance.terminate()
+                if subproc_test.popen_instance:
+                    subproc_test.popen_instance.terminate()
+                else:
+                    logging.warning("Could not find subprocess_test.popen_instance")
             if self._future.done():
                 logger.info("Future is done")
                 try:
                     self._future.result()
                 except Exception as e:
-                    logging.exception("Future failed")
+                    logging.exception(f"Future failed: {e}")
                 break
 
         logger.info("Sending stop to Windows Service Controller")
