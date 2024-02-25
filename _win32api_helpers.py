@@ -69,14 +69,15 @@ def environment_block_for_user(logon_token: HANDLE) -> c_void_p:
 
 @contextmanager
 def environment_block_for_user_context(logon_token: HANDLE) -> Generator[c_void_p, None, None]:
+    # WARNING! DO NOT USE THIS -- If the EnvironmentBlock is destroyed before the process using it
+    # has exited then we'll get an error in ntdll.dll
     lp_environment: Optional[c_void_p] = None
     try:
         lp_environment = environment_block_for_user(logon_token)
         yield lp_environment
     finally:
-        pass
-    #     if lp_environment is not None and not DestroyEnvironmentBlock(lp_environment):
-    #         raise WinError()
+        if lp_environment is not None and not DestroyEnvironmentBlock(lp_environment):
+            raise WinError()
 
 def adjust_privileges(privilege_names: list[str], enable: bool) -> None:
     proc_token = HANDLE(0)

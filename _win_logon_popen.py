@@ -9,7 +9,7 @@ from subprocess import (
 from typing import Any
 from _win_user import WindowsSessionUserWithToken
 from _win32api_helpers import (
-    environment_block_for_user_context,
+    environment_block_for_user,
 )
 from _win32api import (
     # Constants
@@ -116,32 +116,35 @@ class PopenWindowsAsLogon(Popen):
         # process if lpEnvironment is NULL. It is your responsibility to prepare the environment block for the new process and
         # specify it in lpEnvironment.
 
-        with environment_block_for_user_context(self.user.logon_token) as env_ptr:
-            logger.info("Starting!")
-            try:
-                if not CreateProcessAsUserW(
-                    self.user.logon_token,
-                    executable,
-                    cmdline,
-                    None,
-                    None,
-                    True,
-                    creationflags | CREATE_UNICODE_ENVIRONMENT,
-                    env_ptr,
-                    cwd,
-                    byref(si),
-                    byref(pi),
-                ):
-                    raise WinError()
-                logger.info("Process started")
-            except Exception as e:
-                logger.info("Exception!", str(e))
-            finally:
-                # Child is launched. Close the parent's copy of those pipe
-                # handles that only the child should have open.
-                logger.info("Closing pipe fds")
-                self._close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)
-                logger.info("pipe fds closed")
+        # TODO - How do we cleanup the environment block?
+        #  If we Destroy it before the subprocess has exited then we get a hard crash
+        #  in ntdll.dll
+        env_ptr = environment_block_for_user(self.user.logon_token)
+        logger.info("Starting!")
+        try:
+            if not CreateProcessAsUserW(
+                self.user.logon_token,
+                executable,
+                cmdline,
+                None,
+                None,
+                True,
+                creationflags | CREATE_UNICODE_ENVIRONMENT,
+                env_ptr,
+                cwd,
+                byref(si),
+                byref(pi),
+            ):
+                raise WinError()
+            logger.info("Process started")
+        except Exception as e:
+            logger.info("Exception!", str(e))
+        finally:
+            # Child is launched. Close the parent's copy of those pipe
+            # handles that only the child should have open.
+            logger.info("Closing pipe fds")
+            self._close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)
+            logger.info("pipe fds closed")
 
         
         # Retain the process handle, but close the thread handle
