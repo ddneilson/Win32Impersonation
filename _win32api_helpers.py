@@ -27,7 +27,10 @@ from _win32api import (
 from ctypes import (
     WinError,
     byref,
+    cast,
     c_void_p,
+    c_wchar,
+    c_wchar_p,
     sizeof,
 )
 from ctypes.wintypes import (
@@ -66,6 +69,37 @@ def environment_block_for_user(logon_token: HANDLE) -> c_void_p:
     if not CreateEnvironmentBlock(byref(environment), logon_token, False):
         raise WinError()
     return environment
+
+
+def environment_dict_from_block(block: c_void_p) -> dict[str, str]:
+    """Converts an environment block as returned from CreateEnvironmentBlock to a Python dict of key/value strings.
+
+    An environment block is a void pointer. The pointer points to a sequence of strings. Each string is terminated with a
+    null character. The final string is terminated by an additional null character.
+    """
+    w_char_size = sizeof(c_wchar)
+    cur: int = block.value
+    key_val_str = cast(cur, c_wchar_p).value
+    env: dict[str, str] = {}
+    while key_val_str:
+        key, val = key_val_str.split("=", maxsplit=1)
+        env[key] = val
+        # Advance pointer by string length plus a null character
+        cur += (len(key_val_str) + 1) * w_char_size
+        key_val_str = cast(cur, c_wchar_p).value
+
+    return env
+
+def environment_dict_to_block(env: dict[str, str]) -> c_wchar_p:
+    """Converts a Python dictionary representation of an environment into a character beffer as expected by the
+    lpEnvironment argument to the CreateProcess* family of win32 functions.
+    """
+    # Create a string with null-character delimiters between each "key=value" string
+    null_delimited = '\0'.join(f'{key}={value}' for key, value in env.items())
+    # Add a final null-terminator character
+    env_block_str = null_delimited + '\0'
+
+    return c_wchar_p(env_block_str)
 
 @contextmanager
 def environment_block_for_user_context(logon_token: HANDLE) -> Generator[c_void_p, None, None]:

@@ -6,10 +6,13 @@ from subprocess import (
     list2cmdline,
     Handle
 )
+from enum import Enum
 from typing import Any
 from _win_user import WindowsSessionUserWithToken
 from _win32api_helpers import (
     environment_block_for_user,
+    environment_dict_from_block,
+    environment_dict_to_block,
 )
 from _win32api import (
     # Constants
@@ -29,6 +32,7 @@ from ctypes import (
     WinError
 )
 
+import os
 import logging
 logger = logging.getLogger()
 
@@ -37,8 +41,27 @@ if platform.python_implementation() != "CPython":
 
 CREATE_UNICODE_ENVIRONMENT = 0x400
 
+
+class BaseEnvironment(Enum):
+        TARGET_USER = 0
+        """Supplied environment variables supercede target user default environment"""
+        NONE = 2
+        """Supplied environment variables are the only environment variables."""
+        INHERIT = 1
+        """Supplied environment variables supercede inherited environment variables of current process"""
+
 class PopenWindowsAsLogon(Popen):
-    def __init__(self, *args: Any, user: WindowsSessionUserWithToken, **kwargs: Any) -> None:
+
+    _base_environment: BaseEnvironment = BaseEnvironment.TARGET_USER
+
+    def __init__(
+        self,
+        *args: Any,
+        user: WindowsSessionUserWithToken,
+        base_environment: BaseEnvironment = BaseEnvironment.TARGET_USER,
+        **kwargs: Any
+    ) -> None:
+        self._base_environment = base_environment
         self.user = user
         super(PopenWindowsAsLogon, self).__init__(*args, **kwargs)
     
@@ -119,7 +142,26 @@ class PopenWindowsAsLogon(Popen):
         # TODO - How do we cleanup the environment block?
         #  If we Destroy it before the subprocess has exited then we get a hard crash
         #  in ntdll.dll
-        env_ptr = environment_block_for_user(self.user.logon_token)
+
+        base_env: dict[str, str] = {}
+        if self._base_environment == BaseEnvironment.TARGET_USER:
+            env_ptr = environment_block_for_user(self.user.logon_token)
+            base_env = environment_dict_from_block(env_ptr)
+        elif self._base_environment == BaseEnvironment.INHERIT:
+            base_env = dict(os.environ)
+        elif self._base_environment == BaseEnvironment.NONE:
+            base_env = {}
+        else:
+            raise NotImplementedError(f"base_environment of {self._base_environment.value} not implemented")
+        
+        merged_env = base_env.copy()
+        if env:
+            merged_env.update(env)
+        # Sort env vars by keys
+        merged_env = {key: merged_env[key] for key in sorted(merged_env.keys())}
+        env_ptr = environment_dict_to_block(merged_env)
+
+
         logger.info("Starting!")
         try:
             if not CreateProcessAsUserW(
