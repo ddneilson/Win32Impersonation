@@ -19,8 +19,8 @@ popen_instance: Optional[PopenWindowsAsLogon] = None
 def run() -> None:
     global popen_instance
     
-    username = "agentuser"
-    password = "arandom12!@"
+    username = "jobuser"
+    password = "arandom12@!"
 
     command = [
         #r"C:\Windows\System32\nvidia-smi.exe",

@@ -2,6 +2,7 @@ from _win32api import (
     # Constants
     TOKEN_ADJUST_PRIVILEGES,
     LOGON32_LOGON_INTERACTIVE,
+    LOGON32_LOGON_BATCH,
     LOGON32_PROVIDER_DEFAULT,
     PI_NOUI,
     # Structures
@@ -44,9 +45,9 @@ def logon_user(username: str, password: str) -> HANDLE:
     hToken = HANDLE(0)
     if not LogonUserW(
         username,
-        None, # TODO - domain handling
+        None, # TODO - domain handling??
         password,
-        LOGON32_LOGON_INTERACTIVE,
+        LOGON32_LOGON_BATCH,
         LOGON32_PROVIDER_DEFAULT,
         byref(hToken)
     ):

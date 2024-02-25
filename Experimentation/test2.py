@@ -414,7 +414,7 @@ def luid_attribute_to_str(attr: int) -> str:
         ret.append("REMOVED")
     if attr & SE_PRIVILEGE_USED_FOR_ACCESS:
         ret.append("USED_FOR_ACCESS")
-    return " | ".join(ret)
+    return hex(attr) + " = " + " | ".join(ret)
 
 
 def print_token_privs(name: str, token: HANDLE) -> None:
