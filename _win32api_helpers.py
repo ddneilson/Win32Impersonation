@@ -82,7 +82,7 @@ def environment_block_for_user_context(logon_token: HANDLE) -> Generator[c_void_
 def adjust_privileges(privilege_names: list[str], enable: bool) -> None:
     proc_token = HANDLE(0)
     if not OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, byref(proc_token)):
-        raise WinEror()
+        raise WinError()
 
     token_privileges = TOKEN_PRIVILEGES.allocate(len(privilege_names))
     privs_array = token_privileges.privileges_array()
@@ -94,7 +94,7 @@ def adjust_privileges(privilege_names: list[str], enable: bool) -> None:
 
     if not AdjustTokenPrivileges(proc_token, False, byref(token_privileges), sizeof(token_privileges), None, None):
         CloseHandle(proc_token)
-        raise WinEror()
+        raise WinError()
     
     CloseHandle(proc_token)
 
@@ -125,12 +125,11 @@ def load_user_profile(username: str, logon_token: HANDLE) -> PROFILEINFO:
 
 @contextmanager
 def user_profile_context(username: str, logon_token: HANDLE) -> Generator[PROFILEINFO, None, None]:
-    profile_info: Optional[PROFILE_INFO] = None
+    profile_info = load_user_profile(username, logon_token)
     try:
-        profile_info = load_profiload_user_profile(username, logon_token)
         yield profile_info
     finally:
-        if profile_info is not None and not UnloadUserProfile(logon_token, profile_info.hProfile):
+        if not UnloadUserProfile(logon_token, profile_info.hProfile):
             # "Before calling UnloadUserProfile you should ensure that all handles to keys that you
             # have opened in the user's registry hive are closed. If you do not close all open 
             # registry handles, the user's profile fails to unload."
