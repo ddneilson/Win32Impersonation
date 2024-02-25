@@ -29,7 +29,7 @@ def run_subproc() -> None:
     try:
         run()
     except Exception as e:
-        logger.exception("Exception!")
+        logger.exception(f"Exception in run_subproc: {e}")
 
 class OpenJDService(win32serviceutil.ServiceFramework):
     _svc_name_ = "OpenJDServiceTest_Feb24"

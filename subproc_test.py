@@ -52,4 +52,6 @@ def run() -> None:
     else:
         logger.info("No stdout")
 
+    logger.info(f"Subprocess exit code is {popen_instance.wait()}")
+
     user.close()

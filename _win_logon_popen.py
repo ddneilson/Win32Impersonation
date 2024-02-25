@@ -137,8 +137,6 @@ class PopenWindowsAsLogon(Popen):
             ):
                 raise WinError()
             logger.info("Process started")
-        except Exception as e:
-            logger.info("Exception!", str(e))
         finally:
             # Child is launched. Close the parent's copy of those pipe
             # handles that only the child should have open.
