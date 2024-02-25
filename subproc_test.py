@@ -47,8 +47,14 @@ def run() -> None:
     )
 
     if popen_instance.stdout is not None:
-        for line in iter(popen_instance.stdout.readline, ""):
-            logger.info(line)
+        try:
+            for line in iter(popen_instance.stdout.readline, ""):
+                logger.info(line)
+        except ValueError as e:
+            if 'I/O operation on closed file.' == str(e):
+                logger.info("Stdout closed")
+            else:
+                raise
     else:
         logger.info("No stdout")
 

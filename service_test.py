@@ -65,6 +65,7 @@ class OpenJDService(win32serviceutil.ServiceFramework):
                     logger.info("Stop event recieved!")
                     if subproc_test.popen_instance:
                         subproc_test.popen_instance.terminate()
+                        subproc_test.popen_instance.stdout.close()
                     else:
                         logging.warning("Could not find subprocess_test.popen_instance")
                 if self._future.done():
