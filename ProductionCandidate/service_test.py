@@ -1,10 +1,15 @@
 # To use:
-# 1.  Install `pywin32` and `openjd-sessions` to the global `site-packages`
+# 1.  Install `pywin32` to the global `site-packages`
 #        pip install pywin32
 # 2.  Install the service:
 #        python service_test.py install
 # 3.  Run the pywin32 post-install script:
 #        pywin32_postinstall.py -install
+# 4.  To delete the service when done:
+#      a) sc query state=all > service-list.txt
+#      b) Find your service in the list, and get the SERVICE_NAME
+#          The SERVICE_NAME should match the _svc_name in the class below
+#      c) sc delete <SERVICE_NAME>
 
 import win32serviceutil
 import win32service
@@ -32,10 +37,10 @@ def run_subproc() -> None:
     except Exception as e:
         logger.exception(f"Exception in run_subproc: {e}")
 
-class OpenJDService(win32serviceutil.ServiceFramework):
+class TestingService(win32serviceutil.ServiceFramework):
     _future = None
-    _svc_name_ = "OpenJDServiceTest_Feb24"
-    _svc_display_name_ = "OpenJD Service Prototype - Feb24"
+    _svc_name_ = "TESTING_Service"
+    _svc_display_name_ = "TESTING Service"
    
     def __init__(self,args):
         win32serviceutil.ServiceFramework.__init__(self,args)
@@ -86,6 +91,6 @@ class OpenJDService(win32serviceutil.ServiceFramework):
 
 if __name__ == '__main__':
     try:
-        win32serviceutil.HandleCommandLine(OpenJDService)
+        win32serviceutil.HandleCommandLine(TestingService)
     except Exception as e:
         logging.exception(e)
