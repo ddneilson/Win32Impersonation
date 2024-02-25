@@ -23,7 +23,9 @@ from collections.abc import Sequence
 # Constants
 # =======================
 
-LOGON_WITH_PROFILE   = 0x00000001
+# Ref: https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw
+LOGON_WITH_PROFILE        = 0x00000001
+LOGON_NETCREDENTIALS_ONLY = 0x00000002
 
 # STARTINFO Flags (ref: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfoa)
 STARTF_USESHOWWINDOW = 0x00000001
@@ -35,12 +37,12 @@ SE_PRIVILEGE_ENABLED            = 0x00000002
 SE_PRIVILEGE_REMOVED            = 0x00000004
 SE_PRIVILEGE_USED_FOR_ACCESS    = 0x80000000
 
+# Ref: https://learn.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
 SE_BACKUP_NAME             = "SeBackupPrivilege"
 SE_RESTORE_NAME            = "SeRestorePrivilege"
 SE_INCREASE_QUOTA_NAME     = "SeIncreaseQuotaPrivilege"
 SE_ASSIGNPRIMARYTOKEN_NAME = "SeAssignPrimaryTokenPrivilege"
-
-TOKEN_ADJUST_PRIVILEGES         = 0x00000020
+SE_TCB_NAME                = "SeTcbPrivilege"
 
 # Constant values (ref: https://learn.microsoft.com/en-us/windows/win32/secauthn/logonuserexexw)
 LOGON32_PROVIDER_DEFAULT  = 0
@@ -52,6 +54,49 @@ LOGON32_LOGON_NETWORK_CLEARTEXT = 8
 
 # Prevents displaying of messages
 PI_NOUI = 0x00000001
+
+# Values of the TOKEN_TYPE enumeration
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_type
+TOKEN_TYPE_PRIMARY       = 1
+TOKEN_TYPE_IMPERSONATION = 2
+
+# Values of the SECURITY_IMPERSONATION_LEVEL enumeration (SIL = "Security Impersonation Level")
+# https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-security_impersonation_level
+SIL_ANONYMOUS      = 0
+SIL_IDENTIFICATION = 1
+SIL_IMPERSONATION  = 2
+SIL_DELEGATION     = 3
+
+STANDARD_RIGHTS_REQUIRED = 0x0F0000
+STANDARD_RIGHTS_READ     = 0x020000
+STANDARD_RIGHTS_WRITE    = STANDARD_RIGHTS_READ
+STANDARD_RIGHTS_EXECUTE  = STANDARD_RIGHTS_READ
+STANDARD_RIGHTS_ALL      = 0x1F0000
+
+# Token access privileges (ref: https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects)
+TOKEN_ASSIGN_PRIMARY    = 0x0001
+TOKEN_DUPLICATE         = 0x0002
+TOKEN_IMPERSONATE       = 0x0004
+TOKEN_QUERY             = 0x0008
+TOKEN_QUERY_SOURCE      = 0x0010
+TOKEN_ADJUST_PRIVILEGES = 0x0020
+TOKEN_ADJUST_GROUPS     = 0x0040
+TOKEN_ADJUST_DEFAULT    = 0x0080
+TOKEN_ADJUST_SESSIONID  = 0x0100
+TOKEN_READ              = STANDARD_RIGHTS_READ | TOKEN_QUERY
+TOKEN_WRITE             = STANDARD_RIGHTS_WRITE | TOKEN_ADJUST_PRIVILEGES | TOKEN_ADJUST_GROUPS | TOKEN_ADJUST_DEFAULT
+TOKEN_ALL_ACCESS        = (
+    STANDARD_RIGHTS_ALL |
+    TOKEN_ASSIGN_PRIMARY |
+    TOKEN_DUPLICATE |
+    TOKEN_IMPERSONATE | 
+    TOKEN_QUERY |
+    TOKEN_QUERY_SOURCE | 
+    TOKEN_ADJUST_PRIVILEGES |
+    TOKEN_ADJUST_GROUPS |
+    TOKEN_ADJUST_DEFAULT |
+    TOKEN_ADJUST_SESSIONID
+)
 
 # From https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class
 TokenPrivileges         = 3

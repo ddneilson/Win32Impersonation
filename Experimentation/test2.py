@@ -30,6 +30,37 @@ SE_TCB_NAME                = "SeTcbPrivilege"
 TokenPrivileges         = 3
 TokenSecurityAttributes = 39
 
+STANDARD_RIGHTS_REQUIRED = 0x0F0000
+STANDARD_RIGHTS_READ     = 0x020000
+STANDARD_RIGHTS_WRITE    = STANDARD_RIGHTS_READ
+STANDARD_RIGHTS_EXECUTE  = STANDARD_RIGHTS_READ
+STANDARD_RIGHTS_ALL      = 0x1F0000
+
+# Token access privileges (ref: https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects)
+TOKEN_ASSIGN_PRIMARY    = 0x0001
+TOKEN_DUPLICATE         = 0x0002
+TOKEN_IMPERSONATE       = 0x0004
+TOKEN_QUERY             = 0x0008
+TOKEN_QUERY_SOURCE      = 0x0010
+TOKEN_ADJUST_PRIVILEGES = 0x0020
+TOKEN_ADJUST_GROUPS     = 0x0040
+TOKEN_ADJUST_DEFAULT    = 0x0080
+TOKEN_ADJUST_SESSIONID  = 0x0100
+TOKEN_READ              = STANDARD_RIGHTS_READ | TOKEN_QUERY
+TOKEN_WRITE             = STANDARD_RIGHTS_WRITE | TOKEN_ADJUST_PRIVILEGES | TOKEN_ADJUST_GROUPS | TOKEN_ADJUST_DEFAULT
+TOKEN_ALL_ACCESS        = (
+    STANDARD_RIGHTS_ALL |
+    TOKEN_ASSIGN_PRIMARY |
+    TOKEN_DUPLICATE |
+    TOKEN_IMPERSONATE | 
+    TOKEN_QUERY |
+    TOKEN_QUERY_SOURCE | 
+    TOKEN_ADJUST_PRIVILEGES |
+    TOKEN_ADJUST_GROUPS |
+    TOKEN_ADJUST_DEFAULT |
+    TOKEN_ADJUST_SESSIONID
+)
+
 # Structures
 # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfoa
 class STARTUPINFO(ctypes.Structure):
@@ -110,6 +141,10 @@ class TOKEN_PRIVILEGES(ctypes.Structure):
 kernel32.CloseHandle.restype = BOOL
 kernel32.CloseHandle.argtypes = [HANDLE]
 
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess
+kernel32.GetCurrentProcess.restype = HANDLE
+kernel32.GetCurrentProcess.argtypes = []
+
 advapi32.LogonUserW.restype = BOOL
 advapi32.LogonUserW.argtypes = [LPCWSTR, LPCWSTR, LPCWSTR, DWORD, DWORD, PHANDLE]
 advapi32.CreateProcessWithTokenW.restype = BOOL
@@ -167,6 +202,15 @@ advapi32.LookupPrivilegeNameW.argtypes = [
     LPWSTR, # [out] lpName
     wintypes.LPDWORD, # [in, out] cchName
 ]
+
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocesstoken
+advapi32.OpenProcessToken.restype = BOOL
+advapi32.OpenProcessToken.argtypes = [
+    HANDLE, # [in] ProcessHandle,
+    DWORD, # [in] DesiredAccess
+    ctypes.POINTER(HANDLE), # [out] TokenHandle
+]
+
 
 userenv.LoadUserProfileW.restype = BOOL
 userenv.LoadUserProfileW.argtypes = [HANDLE, ctypes.POINTER(PROFILEINFO)]
@@ -294,7 +338,7 @@ def logon_context(username: str, password: str) -> HANDLE:
         username,   # username[in]
         None,          # domain[in]
         password, # password[out]
-        LOGON32_LOGON_SERVICE, # [in]
+        LOGON32_LOGON_BATCH, #LOGON32_LOGON_SERVICE, # [in]
         LOGON32_PROVIDER_DEFAULT, # [in]
         ctypes.byref(hToken) # [out]
     )
@@ -373,12 +417,23 @@ def luid_attribute_to_str(attr: int) -> str:
     return " | ".join(ret)
 
 
-for privilege in (SE_ASSIGNPRIMARYTOKEN_NAME, SE_INCREASE_QUOTA_NAME, SE_TCB_NAME):
-    luid = LUID(0)
-    if advapi32.LookupPrivilegeValueW(None, privilege, ctypes.byref(luid)):
-        print(f"Have {privilege}")
-    else:
-        print(f"Do not habe {privilege}")
+def print_token_privs(name: str, token: HANDLE) -> None:
+    token_privileges = get_token_privileges(token)
+    print(f"Token Privileges for token {name}:")
+    for p in token_privileges:
+        print(lookup_privilege_name(p.Luid), luid_attribute_to_str(p.Attributes))
+    print("---")
+
+# Note: This doesn't actually looking the setting of a privilege.
+# It's just looking up the ID of a privilege in the local system;
+# LookupPrivilegeValueW returns True if the lookup was successful.
+#
+# for privilege in (SE_ASSIGNPRIMARYTOKEN_NAME, SE_INCREASE_QUOTA_NAME, SE_TCB_NAME):
+#     luid = LUID(0)
+#     if advapi32.LookupPrivilegeValueW(None, privilege, ctypes.byref(luid)):
+#         print(f"Have {privilege}")
+#     else:
+#         print(f"Do not have {privilege}")
 
 commands = (
     [
@@ -397,16 +452,17 @@ command = [
 ]
 username = "agentuser"
 password = "arandom12!@"
+
+proc_token = HANDLE(0)
+if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), TOKEN_READ, ctypes.byref(proc_token)):
+    raise WinError()
+
+print_token_privs("Process", proc_token)
+kernel32.CloseHandle(proc_token)
+
 with logon_context(username, password) as logon_token:
-
     load_profile(username, logon_token)
-    token_privileges = get_token_privileges(logon_token)
-    print("Token Privileges:")
-    for p in token_privileges:
-        print(lookup_privilege_name(p.Luid), luid_attribute_to_str(p.Attributes))
-    print("---")
-
-
+    print_token_privs("LogonToken", logon_token)
 
     for command in commands:
         popen_args: dict[str, Any] = dict(
