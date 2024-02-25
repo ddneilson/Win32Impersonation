@@ -33,25 +33,19 @@ def run_subproc() -> None:
         logger.exception(f"Exception in run_subproc: {e}")
 
 class OpenJDService(win32serviceutil.ServiceFramework):
+    _future = None
     _svc_name_ = "OpenJDServiceTest_Feb24"
     _svc_display_name_ = "OpenJD Service Prototype - Feb24"
-    _stop_requested = False
-
-    _threadpool = None
-    _future = None
-
    
     def __init__(self,args):
         win32serviceutil.ServiceFramework.__init__(self,args)
         self.stop_event = win32event.CreateEvent(None,0,0,None)
         socket.setdefaulttimeout(60)
-        self.stop_requested = False
 
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         win32event.SetEvent(self.stop_event)
         logger.info('Stopping service ...')
-        self.stop_requested = True
 
     def SvcDoRun(self):
         servicemanager.LogMsg(
@@ -60,26 +54,26 @@ class OpenJDService(win32serviceutil.ServiceFramework):
             (self._svc_name_,'')
         )
         logger.info("Service starting...")
-        self._threadpool = concurrent.futures.ThreadPoolExecutor()
-        logger.info("Submitting future")
-        self._future = self._threadpool.submit(run_subproc)
-        logger.info("Future submitted")
+        with concurrent.futures.ThreadPoolExecutor() as threadpool:
+            logger.info("Submitting future")
+            self._future = threadpool.submit(run_subproc)
+            logger.info("Future submitted")
 
-        while True:
-            logger.info("Polling...")
-            if not win32event.WaitForSingleObject(self.stop_event, 1000):
-                logger.info("Stop event recieved!")
-                if subproc_test.popen_instance:
-                    subproc_test.popen_instance.terminate()
-                else:
-                    logging.warning("Could not find subprocess_test.popen_instance")
-            if self._future.done():
-                logger.info("Future is done")
-                try:
-                    self._future.result()
-                except Exception as e:
-                    logging.exception(f"Future failed: {e}")
-                break
+            while True:
+                logger.info("Polling...")
+                if not win32event.WaitForSingleObject(self.stop_event, 1000):
+                    logger.info("Stop event recieved!")
+                    if subproc_test.popen_instance:
+                        subproc_test.popen_instance.terminate()
+                    else:
+                        logging.warning("Could not find subprocess_test.popen_instance")
+                if self._future.done():
+                    logger.info("Future is done")
+                    try:
+                        self._future.result()
+                    except Exception as e:
+                        logging.exception(f"Future failed: {e}")
+                    break
 
         logger.info("Sending stop to Windows Service Controller")
         servicemanager.LogMsg(
