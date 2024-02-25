@@ -10,6 +10,7 @@ import win32serviceutil
 import win32service
 import win32event
 import servicemanager
+import socket
 
 import concurrent.futures
 import logging
@@ -18,7 +19,7 @@ from subproc_test import run, popen_instance
 logger = logging.getLogger()
 
 logging.basicConfig(
-    filename = r"C:\Users\Administrator\ServiceExperimentation\Feb24\service-test-log.txt",
+    filename = r"C:\Users\Administrator\ServiceExperimentation\Win32Impersonation\service-test-log.txt",
     level = logging.DEBUG, 
     format = '%(asctime)s [%(levelname)-7.7s] %(message)s'
 )
@@ -47,7 +48,7 @@ class OpenJDService(win32serviceutil.ServiceFramework):
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
         win32event.SetEvent(self.stop_event)
-        # logger.info('Stopping service ...')
+        logger.info('Stopping service ...')
         self.stop_requested = True
 
     def SvcDoRun(self):
@@ -56,16 +57,17 @@ class OpenJDService(win32serviceutil.ServiceFramework):
             servicemanager.PYS_SERVICE_STARTED,
             (self._svc_name_,'')
         )
-        #logger.info("Service starting...")
-        # self._threadpool = concurrent.futures.ThreadPoolExecutor()
-        #logger.info("Submitting future")
+        logger.info("Service starting...")
+        self._threadpool = concurrent.futures.ThreadPoolExecutor()
+        logger.info("Submitting future")
         #self._future = self._threadpool.submit(run_subproc)
-        #logger.info("Future submitted")
+        logger.info("Future submitted")
 
-        # while True:
-        #     if win32event.WaitForSingleObject(self.ev_stop, 1000):
-        #         logger.info("Stop event recieved!")
-        #         popen_instance.terminate()
+        while True:
+            if not win32event.WaitForSingleObject(self.stop_event, 1000):
+                logger.info("Stop event recieved!")
+                break
+        #        popen_instance.terminate()
             # if self._future.done():
             #     logger.info("Future is done")
             #     try:
@@ -74,7 +76,7 @@ class OpenJDService(win32serviceutil.ServiceFramework):
             #         logging.exception("Future failed")
             #         break
 
-        #logger.info("Sending stop to Windows Service Controller")
+        logger.info("Sending stop to Windows Service Controller")
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,
             servicemanager.PYS_SERVICE_STOPPED,

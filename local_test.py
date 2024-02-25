@@ -4,7 +4,7 @@ import logging
 logger = logging.getLogger()
 
 logging.basicConfig(
-    filename = r"C:\Users\Administrator\ServiceExperimentation\Feb24\local-test-log.txt",
+    filename = r"C:\Users\Administrator\ServiceExperimentation\Win32Impersonation\local-test-log.txt",
     level = logging.DEBUG, 
     format = '%(asctime)s [%(levelname)-7.7s] %(message)s'
 )
