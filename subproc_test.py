@@ -10,6 +10,7 @@ from subprocess import (
 )
 from typing import Any, Optional
 import logging
+import os
 
 logger = logging.getLogger()
 
@@ -49,7 +50,7 @@ def run() -> None:
     if popen_instance.stdout is not None:
         try:
             for line in iter(popen_instance.stdout.readline, ""):
-                logger.info(line.rstrip(os.linesep))
+                logger.info(f"[STDOUT] {line.rstrip(os.linesep)}")
         except ValueError as e:
             if 'I/O operation on closed file.' == str(e):
                 logger.info("Stdout closed")
