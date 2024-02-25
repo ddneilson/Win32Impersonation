@@ -4,6 +4,7 @@ from subprocess import (
     CREATE_NEW_CONSOLE,
     Popen,
     list2cmdline,
+    Handle
 )
 from typing import Any
 from _win_user import WindowsSessionUserWithToken
@@ -18,6 +19,7 @@ from _win32api import (
     PROCESS_INFORMATION,
     STARTUPINFO,
     # Functions
+    CloseHandle,
     CreateProcessAsUserW,
 )
 from ctypes import (
@@ -131,18 +133,25 @@ class PopenWindowsAsLogon(Popen):
                     byref(pi),
                 ):
                     raise WinError()
-                # TODO - wut?
                 logger.info("Process started")
             except Exception as e:
                 logger.info("Exception!", str(e))
             finally:
                 # Child is launched. Close the parent's copy of those pipe
                 # handles that only the child should have open.
+                logger.info("Closing pipe fds")
                 self._close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)
+                logger.info("pipe fds closed")
 
+        
         # Retain the process handle, but close the thread handle
-        CloseHandle(pi.hThread)
+        if pi.hThread != 0:
+             CloseHandle(pi.hThread)
+
+        logger.info("Passed close")
 
         self._child_created = True
         self.pid = pi.dwProcessId
         self._handle = Handle(pi.hProcess)
+
+        logger.info("Exiting: _execute_child")

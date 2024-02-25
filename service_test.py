@@ -68,15 +68,14 @@ class OpenJDService(win32serviceutil.ServiceFramework):
             logger.info("Polling...")
             if not win32event.WaitForSingleObject(self.stop_event, 1000):
                 logger.info("Stop event recieved!")
+                popen_instance.terminate()
+            if self._future.done():
+                logger.info("Future is done")
+                try:
+                    self._future.result()
+                except Exception as e:
+                    logging.exception("Future failed")
                 break
-            #     popen_instance.terminate()
-            # if self._future.done():
-            #     logger.info("Future is done")
-            #     try:
-            #         self._future.result()
-            #     except Exception as e:
-            #         logging.exception("Future failed")
-            #         break
 
         logger.info("Sending stop to Windows Service Controller")
         servicemanager.LogMsg(

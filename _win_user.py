@@ -1,6 +1,6 @@
 from ctypes import WinError
 from ctypes.wintypes import HANDLE
-from _win32api import PROFILEINFO, UnloadUserProfile
+from _win32api import PROFILEINFO, CloseHandle, UnloadUserProfile
 from _win32api_helpers import logon_user, load_user_profile
 from typing import Optional
 

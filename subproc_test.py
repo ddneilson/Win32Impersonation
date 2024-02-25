@@ -48,7 +48,7 @@ def run() -> None:
 
     if popen_instance.stdout is not None:
         for line in iter(popen_instance.stdout.readline, ""):
-            logger.info(line, end='')
+            logger.info(line)
     else:
         logger.info("No stdout")
 
