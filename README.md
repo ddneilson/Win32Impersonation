@@ -74,9 +74,12 @@ Tests:
 | LS / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
 | LB / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
 | LI / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
-| LS / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
-| LB / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
-| LI / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
+| LS / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess |
+| LB / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess |
+| LI / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess |
+| LS / Host: A,S,PT / Target: A,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | :white_check_mark: Sucess | :white_check_mark: Sucess |
+| LB / Host: A,S,PT / Target: A,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | :white_check_mark: Sucess | :white_check_mark: Sucess |
+| LI / Host: A,S,PT / Target: A,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess |
 
 * "Running interactively" = `ProductionCandidate> python local_test.py`
 * "Running a service" = `ProductionCandidate> install & run service_test.py`

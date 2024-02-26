@@ -48,8 +48,8 @@ def logon_user(username: str, password: str) -> HANDLE:
         username,
         None, # TODO - domain handling??
         password,
-        LOGON32_LOGON_SERVICE,
-        # LOGON32_LOGON_BATCH,
+        # LOGON32_LOGON_SERVICE,
+        LOGON32_LOGON_BATCH,
         # LOGON32_LOGON_INTERACTIVE,
         LOGON32_PROVIDER_DEFAULT,
         byref(hToken)
