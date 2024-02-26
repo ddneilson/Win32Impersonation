@@ -25,7 +25,7 @@ from subproc_test import run
 logger = logging.getLogger()
 
 logging.basicConfig(
-    filename = r"C:\Users\Administrator\ServiceExperimentation\Win32Impersonation\service-test-log.txt",
+    filename = r"C:\Users\Administrator\GitHub\Win32Impersonation\service-test-log.txt",
     level = logging.DEBUG, 
     format = '%(asctime)s [%(levelname)-7.7s] %(message)s'
 )

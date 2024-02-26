@@ -42,6 +42,42 @@ Requires:
       **if running outside of SessionID=0**. 
     * LOGON32_LOGON_INTERACTIVE *does* work if running within SessionID=0, though.
 
+### Testing Matrix
+
+Testing setup:
+* Account running the application: Host
+* Account the subprocess runs under: Target
+* Using impersonation flow: LogonTokenW -> LoadUserProfileW -> CreateProcessAsUserW
+* Running "C:\Windows\System32\whoami.exe" as the impersonated user.
+* Logout then relogin after every account permissions change.
+
+Account properties/privileges shorthand:
+
+| Shorthand | Meaning |
+| --------- | ------------------ |
+| A         | Account is marked as an Administrator |
+| U         | Account is a non-admin user account |
+| PT        | Account has SE_ASSIGNPRIMARY_TOKEN privilege |
+| B         | Account has "Log on as batch job" privilege |
+| S         | Account has "Log on as service" privilege |
+| LS        | LOGON32_LOGON_SERVICE passed to LogonUserW |
+| LB        | LOGON32_LOGON_BATCH passed to LogonUserW |
+| LI        | LOGON32_LOGON_INTERACTIVE passed to LogonUserW |
+
+Tests:
+
+|                                | Host running a service | LocalSystem running a service | Host running interactively | Host running interactively via ssh |
+| ------------------------------ | ---------------------- | ----------------------------- | -------------------------- | ---------------------------------- |
+| LS / Host: A,S / Target: U     | 1385: Logon failure-User has not been granted the requested logon type | 1385: Logon failure-User has not been granted the requested logon type  | 1385: Logon failure-User has not been granted the requested logon type | 1385: Logon failure-User has not been granted the requested logon type |
+| LB / Host: A,S / Target: U     | 1385: Logon failure-User has not been granted the requested logon type | 1385: Logon failure-User has not been granted the requested logon type | 1385: Logon failure-User has not been granted the requested logon type | 1385: Logon failure-User has not been granted the requested logon type |
+| LI / Host: A,S / Target: U     | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
+| LS / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
+| LB / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
+| LI / Host: A,S / Target: U,B,S | 1314: A required privilege not held by the client | :white_check_mark: Sucess | 1314: A required privilege not held by the client | 1314: A required privilege not held by the client |
+| LS / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
+| LB / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
+| LI / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
+
 ## Using CreateProcessWithLogonW
 
 * [CreateProcessWithLogonW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithlogonw)
