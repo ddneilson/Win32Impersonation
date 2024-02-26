@@ -78,6 +78,9 @@ Tests:
 | LB / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
 | LI / Host: A,S,PT / Target: U,B,S | :white_check_mark: Sucess | :white_check_mark: Sucess | whoami.exe: Application unable to start correctly (0xc0000142) | :white_check_mark: Sucess
 
+* "Running interactively" = `ProductionCandidate> python local_test.py`
+* "Running a service" = `ProductionCandidate> install & run service_test.py`
+
 ## Using CreateProcessWithLogonW
 
 * [CreateProcessWithLogonW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithlogonw)
