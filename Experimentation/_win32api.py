@@ -339,7 +339,7 @@ userenv.CreateEnvironmentBlock.argtypes = [
 # # https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-destroyenvironmentblock
 userenv.DestroyEnvironmentBlock.restype = BOOL
 userenv.DestroyEnvironmentBlock.argtypes = [
-    POINTER(ctypes.c_void_p), # [in] lpEnvironment
+    ctypes.c_void_p, # [in] lpEnvironment
 ]
 
 # https://learn.microsoft.com/en-us/windows/win32/api/userenv/nf-userenv-expandenvironmentstringsforuserw
