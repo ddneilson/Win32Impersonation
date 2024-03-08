@@ -7,30 +7,45 @@ from subprocess import (
     Handle
 )
 from enum import Enum
-from typing import Any
+from typing import Any, Optional, cast
 from _win_user import WindowsSessionUserWithToken
 from _win32api_helpers import (
     environment_block_for_user,
-    environment_dict_from_block,
-    environment_dict_to_block,
+    environment_block_from_dict,
+    environment_block_to_dict,
 )
 from _win32api import (
     # Constants
+    PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
     STARTF_USESHOWWINDOW,
     STARTF_USESTDHANDLES,
     # Structures
     PROCESS_INFORMATION,
-    STARTUPINFO,
+    STARTUPINFOEX,
+    SIZE_T,
     # Functions
     CloseHandle,
     CreateProcessAsUserW,
+    CreateEnvironmentBlock,
+    DeleteProcThreadAttributeList,
+    DestroyEnvironmentBlock,
+    InitializeProcThreadAttributeList,
+    UpdateProcThreadAttribute
 )
 from ctypes import (
+    Array,
+    addressof,
     byref,
+    cast as ctypes_cast,
     create_unicode_buffer,
+    c_byte,
+    c_void_p,
+    c_wchar_p,
+    pointer,
     sizeof,
     WinError
 )
+from ctypes.wintypes import HANDLE
 
 import os
 import logging
@@ -39,29 +54,61 @@ logger = logging.getLogger()
 if platform.python_implementation() != "CPython":
     raise RuntimeError(f"Not compatible with the {platform.python_implementation} of Python. Please use CPython.")
 
-CREATE_UNICODE_ENVIRONMENT = 0x400
+CREATE_UNICODE_ENVIRONMENT   = 0x00000400
+EXTENDED_STARTUPINFO_PRESENT = 0x00080000
 
+SW_HIDE = 0
 
-class BaseEnvironment(Enum):
-        TARGET_USER = 0
-        """Supplied environment variables supercede target user default environment"""
-        NONE = 2
-        """Supplied environment variables are the only environment variables."""
-        INHERIT = 1
-        """Supplied environment variables supercede inherited environment variables of current process"""
+def allocate_attribute_list(startup_info: STARTUPINFOEX, num_attributes: int) -> None:
+    # As per https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-initializeprocthreadattributelist#remarks
+    # First we call InitializeProcThreadAttributeList with an null attribute list,
+    # and it'll tell us how large of a buffer lpAttributeList needs to be.
+    # This will always return False, so we don't check return code.
+    lp_size = SIZE_T(0)
+    InitializeProcThreadAttributeList(
+        None,
+        num_attributes,
+        0, # reserved, and must be 0
+        byref(lp_size)
+    )
+
+    # Allocate the desired buffer
+    buffer = (c_byte * lp_size.value)()
+    startup_info.lpAttributeList = ctypes_cast(pointer(buffer) , c_void_p)
+
+    # Second call to actually initialize the buffer
+    if not InitializeProcThreadAttributeList(
+        startup_info.lpAttributeList,
+        num_attributes,
+        0, # reserved, and must be 0
+        byref(lp_size)
+    ):
+        raise WinError()
+
+def inherit_handles(startup_info: STARTUPINFOEX, handles: tuple[int]) -> Array:
+    handles_list = (HANDLE * len(handles))()
+    for i,h in enumerate(handles):
+        handles_list[i] = h
+    if not UpdateProcThreadAttribute(
+        startup_info.lpAttributeList,
+        0, # reserved and must be 0
+        PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        byref(handles_list),
+        sizeof(handles_list),
+        None, # reserved and must be null
+        None # reserved and must be null
+    ):
+        raise WinError()
+    return handles_list
 
 class PopenWindowsAsLogon(Popen):
-
-    _base_environment: BaseEnvironment = BaseEnvironment.TARGET_USER
 
     def __init__(
         self,
         *args: Any,
         user: WindowsSessionUserWithToken,
-        base_environment: BaseEnvironment = BaseEnvironment.TARGET_USER,
         **kwargs: Any
     ) -> None:
-        self._base_environment = base_environment
         self.user = user
         super(PopenWindowsAsLogon, self).__init__(*args, **kwargs)
     
@@ -95,26 +142,38 @@ class PopenWindowsAsLogon(Popen):
         assert not pass_fds, "pass_fds not supported on Windows."
 
         commandline = args if isinstance(args, str) else list2cmdline(args)
+        # CreateProcess* may modify the commandline, so copy it to a mutable buffer
+        cmdline = create_unicode_buffer(commandline)
+
+        if executable is not None:
+            executable = os.fsdecode(executable)
+
+        if cwd is not None:
+            cwd = os.fsdecode(cwd)
 
         # Initialize structures
-        si = STARTUPINFO()
-        si.cb = sizeof(STARTUPINFO)
+        si = STARTUPINFOEX()
+        si.StartupInfo.cb = sizeof(STARTUPINFOEX)
         pi = PROCESS_INFORMATION()
+        creationflags |= EXTENDED_STARTUPINFO_PRESENT
 
         use_std_handles = -1 not in (p2cread, c2pwrite, errwrite)
         if use_std_handles:
-            si.hStdInput = int(p2cread)
-            si.hStdOutput = int(c2pwrite)
-            si.hStdError = int(errwrite)
-            si.dwFlags |= STARTF_USESTDHANDLES
+            si.StartupInfo.hStdInput = int(p2cread)
+            si.StartupInfo.hStdOutput = int(c2pwrite)
+            si.StartupInfo.hStdError = int(errwrite)
+            si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW
+            # Ensure that the console window is hidden
+            si.StartupInfo.wShowWindow = SW_HIDE
         
-        # if creationflags & CREATE_NEW_CONSOLE:
-        #     si.dwFlags |= STARTF_USESHOWWINDOW
-        #     # Ref: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
-        #     si.wShowWindow = 0 # SW_HIDE
-
-        # CreateProcess* may modify the commandline, so copy it to a mutable buffer.
-        cmdline = create_unicode_buffer(commandline)
+        # 
+        handles_to_inherit = tuple(int(h) for h in (p2cread, c2pwrite, errwrite) if h != -1)
+        import sys
+        print(handles_to_inherit)
+        allocate_attribute_list(si, len(handles_to_inherit))
+        # Note: We must ensure that 'handles_list' must persist until the
+        # attribute list is destroyed using DeleteProcThreadAttributeList 
+        handles_list = inherit_handles(si, handles_to_inherit)
 
         # print(pi)
         # print(cmdline)
@@ -139,31 +198,27 @@ class PopenWindowsAsLogon(Popen):
         # process if lpEnvironment is NULL. It is your responsibility to prepare the environment block for the new process and
         # specify it in lpEnvironment.
 
-        # TODO - How do we cleanup the environment block?
-        #  If we Destroy it before the subprocess has exited then we get a hard crash
-        #  in ntdll.dll
+        def _merge_environment(
+            user_env: c_void_p, env: dict[str, Optional[str]]
+        ) -> c_wchar_p:
+            user_env_dict = cast(dict[str, Optional[str]], environment_block_to_dict(user_env))
+            user_env_dict.update(**env)
+            result = {k: v for k, v in user_env_dict.items() if v is not None}
+            return environment_block_from_dict(result)
 
-        base_env: dict[str, str] = {}
-        if self._base_environment == BaseEnvironment.TARGET_USER:
-            env_ptr = environment_block_for_user(self.user.logon_token)
-            base_env = environment_dict_from_block(env_ptr)
-        elif self._base_environment == BaseEnvironment.INHERIT:
-            base_env = dict(os.environ)
-        elif self._base_environment == BaseEnvironment.NONE:
-            base_env = {}
-        else:
-            raise NotImplementedError(f"base_environment of {self._base_environment.value} not implemented")
-        
-        merged_env = base_env.copy()
+        env_ptr = environment_block_for_user(self.user.logon_token)
+        env_block = env_ptr
         if env:
-            merged_env.update(env)
-        # Sort env vars by keys
-        merged_env = {key: merged_env[key] for key in sorted(merged_env.keys())}
-        env_ptr = environment_dict_to_block(merged_env)
-
+            env_block = _merge_environment(env_ptr, env)
+        else:
+            env_block = env_ptr
+        env_block = None
 
         logger.info("Starting!")
         try:
+            # TODO - Integrity level
+            #   https://github.com/chromium/chromium/blob/fd8a8914ca0183f0add65ae55f04e287543c7d4a/base/process/process_info_win.cc#L30
+
             if not CreateProcessAsUserW(
                 self.user.logon_token,
                 executable,
@@ -172,7 +227,7 @@ class PopenWindowsAsLogon(Popen):
                 None,
                 True,
                 creationflags | CREATE_UNICODE_ENVIRONMENT,
-                env_ptr,
+                env_block,
                 cwd,
                 byref(si),
                 byref(pi),
@@ -180,16 +235,23 @@ class PopenWindowsAsLogon(Popen):
                 raise WinError()
             logger.info("Process started")
         finally:
+            logger.info("Finally block")
+
             # Child is launched. Close the parent's copy of those pipe
             # handles that only the child should have open.
             logger.info("Closing pipe fds")
             self._close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)
             logger.info("pipe fds closed")
 
+            try:
+                if not DestroyEnvironmentBlock(env_ptr):
+                    raise WinError()
+            finally:
+                DeleteProcThreadAttributeList(si.lpAttributeList)
+                pass
         
         # Retain the process handle, but close the thread handle
-        if pi.hThread != 0:
-             CloseHandle(pi.hThread)
+        CloseHandle(pi.hThread)
 
         logger.info("Passed close")
 

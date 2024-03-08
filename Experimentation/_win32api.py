@@ -10,14 +10,20 @@ from ctypes.wintypes import (
     LPDWORD,
     LPVOID,
     LPWSTR,
+    PDWORD,
     PHANDLE,
     ULONG,
     WORD,
 )
 from ctypes import (
-    POINTER
+    POINTER,
+    c_size_t,
+    c_void_p
 )
 from collections.abc import Sequence
+
+SIZE_T  = c_size_t
+PSIZE_T = POINTER(SIZE_T)
 
 # =======================
 # Constants
@@ -102,11 +108,14 @@ TOKEN_ALL_ACCESS        = (
 TokenPrivileges         = 3
 TokenSecurityAttributes = 39
 
+
+PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
+
 # =======================
 # Structures
 # =======================
 
-# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfoa
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfow
 class STARTUPINFO(ctypes.Structure):
     _fields_ = [
         ("cb", DWORD),
@@ -129,6 +138,15 @@ class STARTUPINFO(ctypes.Structure):
         ("hStdError", HANDLE),
     ]
 
+PPROC_THREAD_ATTRIBUTE_LIST  = c_void_p
+LPPROC_THREAD_ATTRIBUTE_LIST = PPROC_THREAD_ATTRIBUTE_LIST
+
+# https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-startupinfoexw
+class STARTUPINFOEX(ctypes.Structure):
+    _fields_ = [
+        ("StartupInfo", STARTUPINFO),
+        ("lpAttributeList", PPROC_THREAD_ATTRIBUTE_LIST)
+    ]
 
 # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-process_information
 class PROCESS_INFORMATION(ctypes.Structure):
@@ -149,7 +167,7 @@ class PROFILEINFO(ctypes.Structure):
         ('lpDefaultPath', LPWSTR),
         ('lpServerName', LPWSTR),
         ('lpPolicyPath', LPWSTR),
-        ('hprofile', HANDLE)
+        ('hProfile', HANDLE)
     ]
 
 # https://learn.microsoft.com/en-us/windows/win32/api/wtypesbase/ns-wtypesbase-security_attributes
@@ -212,13 +230,43 @@ kernel32.CloseHandle.argtypes = [
     HANDLE # [in] hObject
 ]
 
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-deleteprocthreadattributelist
+kernel32.DeleteProcThreadAttributeList.restype = None
+kernel32.DeleteProcThreadAttributeList.argtypes = [
+    LPPROC_THREAD_ATTRIBUTE_LIST, # [in, out] lpAttributeList
+]
+
 # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess
 kernel32.GetCurrentProcess.restype = HANDLE
 kernel32.GetCurrentProcess.argtypes = []
 
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-initializeprocthreadattributelist
+kernel32.InitializeProcThreadAttributeList.restype = BOOL
+kernel32.InitializeProcThreadAttributeList.argtypes = [
+    LPPROC_THREAD_ATTRIBUTE_LIST, # [out, optional] lpAttributeList
+    DWORD, # [in] dwAttributeCount
+    DWORD, # [in] dwFlags
+    PSIZE_T # [in,out] lpSize
+]
+
+# https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute
+kernel32.UpdateProcThreadAttribute.restype = BOOL
+kernel32.UpdateProcThreadAttribute.argtypes = [
+    LPPROC_THREAD_ATTRIBUTE_LIST, # [in,out] lpAttributeList
+    DWORD, # [in] dwFlags
+    SIZE_T, # [in] Attribute (note: Pointer-sized integer; not an actual pointer)
+    c_void_p, # [in] lpValue
+    SIZE_T, # [in] cbSize
+    c_void_p, # [out, optional] lpPreviousValue
+    PSIZE_T, # [in, optional] lpReturnSize
+]
+
 # exports:
 CloseHandle = kernel32.CloseHandle
+DeleteProcThreadAttributeList = kernel32.DeleteProcThreadAttributeList
 GetCurrentProcess = kernel32.GetCurrentProcess
+InitializeProcThreadAttributeList = kernel32.InitializeProcThreadAttributeList
+UpdateProcThreadAttribute = kernel32.UpdateProcThreadAttribute
 
 # ---------
 # From: advapi32.dll
@@ -233,7 +281,7 @@ advapi32.AdjustTokenPrivileges.argtypes = [
     POINTER(TOKEN_PRIVILEGES), # [in, optional] NewState
     DWORD, # [in] BufferLength
     POINTER(TOKEN_PRIVILEGES), # [out, optional] PreviousState
-    POINTER(DWORD), # [out, optional] ReturnLength
+    PDWORD, # [out, optional] ReturnLength
 ]
 
 # https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw
@@ -248,7 +296,7 @@ advapi32.CreateProcessAsUserW.argtypes = [
     DWORD, # [in] dwCreationFlags
     LPVOID, # [in, optional] lpEnvironment
     LPCWSTR, # [in, optional] lpCurrentDirectory
-    POINTER(STARTUPINFO), # [in] lpStartupInfo
+    POINTER(STARTUPINFOEX), # [in] lpStartupInfo
     POINTER(PROCESS_INFORMATION) # [out] lpProcessInformation
 ]
 
@@ -273,7 +321,7 @@ advapi32.GetTokenInformation.argtypes = [
     DWORD, # [in] TokenInformationClass (actually an enum)
     LPVOID, # [out, optional] TokenInformation
     DWORD, # [in] TokenInformationLength
-    POINTER(DWORD) # [out] ReturnLength
+    PDWORD # [out] ReturnLength
 ]
 
 # https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-logonuserw
@@ -309,7 +357,7 @@ advapi32.OpenProcessToken.restype = BOOL
 advapi32.OpenProcessToken.argtypes = [
     HANDLE, # [in] ProcessHandle,
     DWORD, # [in] DesiredAccess
-    ctypes.POINTER(HANDLE), # [out] TokenHandle
+    PHANDLE, # [out] TokenHandle
 ]
 
 

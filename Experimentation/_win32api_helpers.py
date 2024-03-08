@@ -49,8 +49,8 @@ def logon_user(username: str, password: str) -> HANDLE:
         None, # TODO - domain handling??
         password,
         # LOGON32_LOGON_SERVICE,
-        LOGON32_LOGON_BATCH,
-        # LOGON32_LOGON_INTERACTIVE,
+        # LOGON32_LOGON_BATCH,
+        LOGON32_LOGON_INTERACTIVE,
         LOGON32_PROVIDER_DEFAULT,
         byref(hToken)
     ):
@@ -69,13 +69,13 @@ def logon_user_context(username: str, password: str) -> Generator[HANDLE, None, 
             raise WinError()
 
 def environment_block_for_user(logon_token: HANDLE) -> c_void_p:
-    environment = c_void_p()
+    environment = c_void_p(0)
     if not CreateEnvironmentBlock(byref(environment), logon_token, False):
         raise WinError()
     return environment
 
 
-def environment_dict_from_block(block: c_void_p) -> dict[str, str]:
+def environment_block_to_dict(block: c_void_p) -> dict[str, str]:
     """Converts an environment block as returned from CreateEnvironmentBlock to a Python dict of key/value strings.
 
     An environment block is a void pointer. The pointer points to a sequence of strings. Each string is terminated with a
@@ -94,7 +94,7 @@ def environment_dict_from_block(block: c_void_p) -> dict[str, str]:
 
     return env
 
-def environment_dict_to_block(env: dict[str, str]) -> c_wchar_p:
+def environment_block_from_dict(env: dict[str, str]) -> c_wchar_p:
     """Converts a Python dictionary representation of an environment into a character beffer as expected by the
     lpEnvironment argument to the CreateProcess* family of win32 functions.
     """
@@ -160,6 +160,8 @@ def load_user_profile(username: str, logon_token: HANDLE) -> PROFILEINFO:
 
         if not LoadUserProfileW(logon_token, byref(pi)):
             raise WinError()
+        
+        return pi
 
 @contextmanager
 def user_profile_context(username: str, logon_token: HANDLE) -> Generator[PROFILEINFO, None, None]:

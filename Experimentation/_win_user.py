@@ -24,13 +24,14 @@ class WindowsSessionUserWithToken:
                 raise
 
     def close(self) -> None:
-        if self._PROFILEINFO is not None:
-            # Attempt to unload the user profile
-            if not UnloadUserProfile(self.logon_token, self._PROFILEINFO.hProfile):
-                # "Before calling UnloadUserProfile you should ensure that all handles to keys that you
-                # have opened in the user's registry hive are closed. If you do not close all open 
-                # registry handles, the user's profile fails to unload."
-                print("Could not unload user profile.")
+        # if self._PROFILEINFO is not None:
+        #     # Attempt to unload the user profile
+        #     if not UnloadUserProfile(self.logon_token, self._PROFILEINFO.hProfile):
+        #         # "Before calling UnloadUserProfile you should ensure that all handles to keys that you
+        #         # have opened in the user's registry hive are closed. If you do not close all open 
+        #         # registry handles, the user's profile fails to unload."
+        #         print("Could not unload user profile.")
+        #         raise WinError()
         CloseHandle(self.logon_token)
 
 
