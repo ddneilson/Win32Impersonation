@@ -111,6 +111,14 @@ TokenSecurityAttributes = 39
 
 PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
 
+SecurityAnonymous = 0
+SecurityIdentification = 1
+SecurityImpersonation = 2
+SecurityDelegation = 3
+
+TokenPrimary = 1
+TokenImpersonation = 2
+
 # =======================
 # Structures
 # =======================
@@ -314,6 +322,16 @@ advapi32.CreateProcessWithTokenW.argtypes = [
     POINTER(PROCESS_INFORMATION) # [out] lpProcessInformation
 ]
 
+advapi32.DuplicateTokenEx.restype = BOOL
+advapi32.DuplicateTokenEx.argtypes = [
+    HANDLE, # [in] hExistingToken
+    DWORD, # [in] dwDesiredAccess
+    POINTER(SECURITY_ATTRIBUTES), # [in, optional] lpTokenAttributes
+    DWORD, # [in] ImpersonationLevel (actually an enum)
+    DWORD, # [in] TokenType (actually an enum)
+    PHANDLE, # [out] phNewToken
+]
+
 # https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation
 advapi32.GetTokenInformation.restype = BOOL
 advapi32.GetTokenInformation.argtypes = [
@@ -365,6 +383,7 @@ advapi32.OpenProcessToken.argtypes = [
 AdjustTokenPrivileges = advapi32.AdjustTokenPrivileges
 CreateProcessAsUserW = advapi32.CreateProcessAsUserW
 CreateProcessWithTokenW = advapi32.CreateProcessWithTokenW
+DuplicateTokenEx = advapi32.DuplicateTokenEx
 GetTokenInformation = advapi32.GetTokenInformation
 LogonUserW = advapi32.LogonUserW
 LookupPrivilegeNameW = advapi32.LookupPrivilegeNameW

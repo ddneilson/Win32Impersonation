@@ -7,21 +7,22 @@ from typing import Optional
 class WindowsSessionUserWithToken:
     username: str
     logon_token: HANDLE
-    _PROFILEINFO: Optional[PROFILEINFO]
+    _PROFILEINFO: Optional[PROFILEINFO] = None
 
-    def __init__(self, *, username: str, password: Optional[str]=None, logon_token: Optional[HANDLE]=None) -> None:
+    def __init__(self, *, username: str, password: Optional[str]=None, logon_token: Optional[HANDLE]=None, load_profile: bool = True) -> None:
         self.username = username
         self._PROFILEINFO = None
         if logon_token:
             self.logon_token = logon_token
         else:
             self.logon_token = logon_user(username, password)
-            try:
-                self._PROFILEINFO = load_user_profile(username, self.logon_token)
-            except WinError:
-                CloseHandle(self.logon_token)
-                self.logon_token = HANDLE(0)
-                raise
+            if load_profile:
+                try:
+                    self._PROFILEINFO = load_user_profile(username, self.logon_token)
+                except WinError:
+                    CloseHandle(self.logon_token)
+                    self.logon_token = HANDLE(0)
+                    raise
 
     def close(self) -> None:
         # if self._PROFILEINFO is not None:

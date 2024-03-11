@@ -16,6 +16,7 @@ from _win32api_helpers import (
 )
 from _win32api import (
     # Constants
+    LOGON_WITH_PROFILE,
     PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
     STARTF_USESHOWWINDOW,
     STARTF_USESTDHANDLES,
@@ -23,13 +24,12 @@ from _win32api import (
     SecurityImpersonation,
     # Structures
     PROCESS_INFORMATION,
-    STARTUPINFOEX,
+    STARTUPINFO,
     SIZE_T,
     # Functions
     CloseHandle,
-    CreateProcessAsUserW,
+    CreateProcessWithTokenW,
     CreateEnvironmentBlock,
-    DeleteProcThreadAttributeList,
     DestroyEnvironmentBlock,
     DuplicateTokenEx,
     InitializeProcThreadAttributeList,
@@ -58,53 +58,10 @@ if platform.python_implementation() != "CPython":
     raise RuntimeError(f"Not compatible with the {platform.python_implementation} of Python. Please use CPython.")
 
 CREATE_UNICODE_ENVIRONMENT   = 0x00000400
-EXTENDED_STARTUPINFO_PRESENT = 0x00080000
 
 SW_HIDE = 0
 
-def allocate_attribute_list(startup_info: STARTUPINFOEX, num_attributes: int) -> None:
-    # As per https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-initializeprocthreadattributelist#remarks
-    # First we call InitializeProcThreadAttributeList with an null attribute list,
-    # and it'll tell us how large of a buffer lpAttributeList needs to be.
-    # This will always return False, so we don't check return code.
-    lp_size = SIZE_T(0)
-    InitializeProcThreadAttributeList(
-        None,
-        num_attributes,
-        0, # reserved, and must be 0
-        byref(lp_size)
-    )
-
-    # Allocate the desired buffer
-    buffer = (c_byte * lp_size.value)()
-    startup_info.lpAttributeList = ctypes_cast(pointer(buffer) , c_void_p)
-
-    # Second call to actually initialize the buffer
-    if not InitializeProcThreadAttributeList(
-        startup_info.lpAttributeList,
-        num_attributes,
-        0, # reserved, and must be 0
-        byref(lp_size)
-    ):
-        raise WinError()
-
-def inherit_handles(startup_info: STARTUPINFOEX, handles: tuple[int]) -> Array:
-    handles_list = (HANDLE * len(handles))()
-    for i,h in enumerate(handles):
-        handles_list[i] = h
-    if not UpdateProcThreadAttribute(
-        startup_info.lpAttributeList,
-        0, # reserved and must be 0
-        PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-        byref(handles_list),
-        sizeof(handles_list),
-        None, # reserved and must be null
-        None # reserved and must be null
-    ):
-        raise WinError()
-    return handles_list
-
-class PopenWindowsAsLogon(Popen):
+class PopenWindowsWithToken(Popen):
 
     def __init__(
         self,
@@ -113,7 +70,7 @@ class PopenWindowsAsLogon(Popen):
         **kwargs: Any
     ) -> None:
         self.user = user
-        super(PopenWindowsAsLogon, self).__init__(*args, **kwargs)
+        super(PopenWindowsWithToken, self).__init__(*args, **kwargs)
     
     def _execute_child(
         self,
@@ -155,29 +112,19 @@ class PopenWindowsAsLogon(Popen):
             cwd = os.fsdecode(cwd)
 
         # Initialize structures
-        si = STARTUPINFOEX()
-        si.StartupInfo.cb = sizeof(STARTUPINFOEX)
+        si = STARTUPINFO()
+        si.cb = sizeof(STARTUPINFO)
         pi = PROCESS_INFORMATION()
-        creationflags |= EXTENDED_STARTUPINFO_PRESENT
 
         use_std_handles = -1 not in (p2cread, c2pwrite, errwrite)
         if use_std_handles:
-            si.StartupInfo.hStdInput = int(p2cread)
-            si.StartupInfo.hStdOutput = int(c2pwrite)
-            si.StartupInfo.hStdError = int(errwrite)
-            si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW
+            si.hStdInput = int(p2cread)
+            si.hStdOutput = int(c2pwrite)
+            si.hStdError = int(errwrite)
+            si.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW
             # Ensure that the console window is hidden
-            si.StartupInfo.wShowWindow = SW_HIDE
+            si.wShowWindow = SW_HIDE
         
-        # 
-        handles_to_inherit = tuple(int(h) for h in (p2cread, c2pwrite, errwrite) if h != -1)
-        import sys
-        print(handles_to_inherit)
-        allocate_attribute_list(si, len(handles_to_inherit))
-        # Note: We must ensure that 'handles_list' must persist until the
-        # attribute list is destroyed using DeleteProcThreadAttributeList 
-        handles_list = inherit_handles(si, handles_to_inherit)
-
         # print(pi)
         # print(cmdline)
         # print(self.user.logon_token)
@@ -219,28 +166,11 @@ class PopenWindowsAsLogon(Popen):
 
         logger.info("Starting!")
         try:
-            dup_token = HANDLE(0)
-            if not DuplicateTokenEx(
+            if not CreateProcessWithTokenW(
                 self.user.logon_token,
-                0,
-                None,
-                SecurityImpersonation,
-                TokenPrimary,
-                byref(dup_token)
-            ):
-                raise WinError()
-            
-            # TODO - Integrity level
-            #   https://wiki.sei.cmu.edu/confluence/display/c/WIN02-C.+Restrict+privileges+when+spawning+child+processes
-            #   https://github.com/chromium/chromium/blob/fd8a8914ca0183f0add65ae55f04e287543c7d4a/base/process/process_info_win.cc#L30
-
-            if not CreateProcessAsUserW(
-                self.user.logon_token,
+                LOGON_WITH_PROFILE,
                 executable,
                 cmdline,
-                None,
-                None,
-                True,
                 creationflags | CREATE_UNICODE_ENVIRONMENT,
                 env_block,
                 cwd,
@@ -258,12 +188,8 @@ class PopenWindowsAsLogon(Popen):
             self._close_pipe_fds(p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite)
             logger.info("pipe fds closed")
 
-            try:
-                if not DestroyEnvironmentBlock(env_ptr):
-                    raise WinError()
-            finally:
-                DeleteProcThreadAttributeList(si.lpAttributeList)
-                pass
+            if not DestroyEnvironmentBlock(env_ptr):
+                raise WinError()
         
         # Retain the process handle, but close the thread handle
         CloseHandle(pi.hThread)
