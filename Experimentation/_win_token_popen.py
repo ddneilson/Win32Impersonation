@@ -50,6 +50,14 @@ from ctypes import (
 )
 from ctypes.wintypes import HANDLE
 
+import win32security
+import ntsecuritycon
+import win32service
+import win32process
+import win32api
+import win32con
+import pywintypes
+
 import os
 import logging
 logger = logging.getLogger()
@@ -60,6 +68,90 @@ if platform.python_implementation() != "CPython":
 CREATE_UNICODE_ENVIRONMENT   = 0x00000400
 
 SW_HIDE = 0
+
+### -- The following copied from saltstack
+# https://github.com/saltstack/salt/blob/127a32e4806e1e186b80afaf60762ebcbc211ef5/salt/platform/win.py#L1074
+# License: Apache-2.0
+
+WINSTA_ALL = (
+    win32con.WINSTA_ACCESSCLIPBOARD
+    | win32con.WINSTA_ACCESSGLOBALATOMS
+    | win32con.WINSTA_CREATEDESKTOP
+    | win32con.WINSTA_ENUMDESKTOPS
+    | win32con.WINSTA_ENUMERATE
+    | win32con.WINSTA_EXITWINDOWS
+    | win32con.WINSTA_READATTRIBUTES
+    | win32con.WINSTA_READSCREEN
+    | win32con.WINSTA_WRITEATTRIBUTES
+    | win32con.DELETE
+    | win32con.READ_CONTROL
+    | win32con.WRITE_DAC
+    | win32con.WRITE_OWNER
+)
+
+DESKTOP_ALL = (
+    win32con.DESKTOP_CREATEMENU
+    | win32con.DESKTOP_CREATEWINDOW
+    | win32con.DESKTOP_ENUMERATE
+    | win32con.DESKTOP_HOOKCONTROL
+    | win32con.DESKTOP_JOURNALPLAYBACK
+    | win32con.DESKTOP_JOURNALRECORD
+    | win32con.DESKTOP_READOBJECTS
+    | win32con.DESKTOP_SWITCHDESKTOP
+    | win32con.DESKTOP_WRITEOBJECTS
+    | win32con.DELETE
+    | win32con.READ_CONTROL
+    | win32con.WRITE_DAC
+    | win32con.WRITE_OWNER
+)
+
+
+def set_user_perm(obj, perm, sid):
+    """
+    Set an object permission for the given user sid
+    """
+    print("Setting permissions for SID: ", str(sid))
+    info = (
+        win32security.OWNER_SECURITY_INFORMATION
+        | win32security.GROUP_SECURITY_INFORMATION
+        | win32security.DACL_SECURITY_INFORMATION
+    )
+    sd = win32security.GetUserObjectSecurity(obj, info)
+    dacl = sd.GetSecurityDescriptorDacl()
+    ace_cnt = dacl.GetAceCount()
+    found = False
+    for idx in range(0, ace_cnt):
+        (aceType, aceFlags), ace_mask, ace_sid = dacl.GetAce(idx)
+        ace_exists = (
+            aceType == ntsecuritycon.ACCESS_ALLOWED_ACE_TYPE
+            and ace_mask == perm
+            and ace_sid == sid
+        )
+        if ace_exists:
+            # If the ace already exists, do nothing
+            print("Exists")
+            break
+    else:
+        print("Adding permission")
+        dacl.AddAccessAllowedAce(dacl.GetAclRevision(), perm, sid)
+        sd.SetSecurityDescriptorDacl(1, dacl, 0)
+        win32security.SetUserObjectSecurity(obj, info, sd)
+
+
+def grant_winsta_and_desktop(th):
+    """
+    Grant the token's user access to the current process's window station and
+    desktop.
+    """
+    current_sid = win32security.GetTokenInformation(th, win32security.TokenUser)[0]
+    # Add permissions for the sid to the current windows station and thread id.
+    # This prevents windows error 0xC0000142.
+    winsta = win32process.GetProcessWindowStation()
+    set_user_perm(winsta, WINSTA_ALL, current_sid)
+    desktop = win32service.GetThreadDesktop(win32api.GetCurrentThreadId())
+    set_user_perm(desktop, DESKTOP_ALL, current_sid)
+
+## -- END COPY
 
 class PopenWindowsWithToken(Popen):
 
@@ -124,7 +216,17 @@ class PopenWindowsWithToken(Popen):
             si.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW
             # Ensure that the console window is hidden
             si.wShowWindow = SW_HIDE
-        
+
+        # Note: This pywintype handle will automatically get closed when the
+        # object is GC'd. This is fine for PoC, but not for general use since it'll
+        # close the logon token.
+        hh = pywintypes.HANDLE(self.user.logon_token.value)
+
+        # A permissions workaround employed by saltstack
+        # https://github.com/saltstack/salt/blob/127a32e4806e1e186b80afaf60762ebcbc211ef5/salt/utils/win_runas.py#L164
+        # Doesn't smell right to me.
+        grant_winsta_and_desktop(hh)
+
         # print(pi)
         # print(cmdline)
         # print(self.user.logon_token)

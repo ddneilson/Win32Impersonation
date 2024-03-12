@@ -57,7 +57,7 @@ Account properties/privileges shorthand:
 | --------- | ------------------ |
 | A         | Account is marked as an Administrator |
 | U         | Account is a non-admin user account |
-| PT        | Account has SE_ASSIGNPRIMARY_TOKEN privilege |
+| PT        | Account has SE_ASSIGNPRIMARYTOKEN_NAME privilege |
 | B         | Account has "Log on as batch job" privilege |
 | S         | Account has "Log on as service" privilege |
 | LS        | LOGON32_LOGON_SERVICE passed to LogonUserW |
@@ -89,3 +89,56 @@ Tests:
 * [CreateProcessWithLogonW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithlogonw)
 
 Using thie API requires that the caller *NOT* be running in Session 0.
+
+## Using CreateProcessWithTokenW
+
+Focusing on using:
+* [LogonUserW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-logonuserw); then
+* [CreateProcessWithTokenW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw)
+
+The documentation says that "The process that calls CreateProcessWithTokenW must have the SE_IMPERSONATE_NAME privilege."
+(aka: "Impersonate a client after authentication"; aka: "SeImpersonatePrivilege")
+
+Notes:
+* When just using CreateProcessWithTokenW, targetting a non-admin user while running the parent process as Administrator I was
+  reliably experiencing a error 0xC0000142 in the subprocess. I found a workaround that entails adding the Security ID (SID) of
+  the target user to both the parent process' Window Station & Desktop's Access Control List (ACL). This not not seem correct/proper
+  to me -- it's a perminant mutation of the system ACLs, and broadly allows the target user this access rather than just the subprocess
+  that we're creating. I wouldn't use this hack in production, but it's sufficient for trying to sort out some of the permissions boundaries
+  of CreateProcessWithTokenW.
+
+### Testing Matrix
+
+Testing setup:
+* Account running the application: Host
+* Account the subprocess runs under: Target
+* Using impersonation flow: LogonTokenW ->  CreateProcessWithTokenW
+    * LOGON32_LOGON_INTERACTIVE passed to LogonUserW
+    * LOGON_WITH_PROFILE passed to CreateProcessWithTokenW
+    * CREATE_NEW_PROCESS_GROUP | CREATE_UNICODE_ENVIRONMENT passed as creationflags to CreateProcessWithTokenW
+* Running "C:\Windows\System32\whoami.exe" as the impersonated user.
+* Logout then relogin after every account permissions change.
+
+
+| Shorthand | Meaning |
+| --------- | ------------------ |
+| A         | Account is marked as an Administrator |
+| U         | Account is a non-admin user account |
+| PT        | Account has SE_ASSIGNPRIMARYTOKEN_NAME privilege |
+| PA        | Account has SE_IMPERSONATE_NAME privilege |
+| PD        | Account has SE_DELEGATE_SESSION_USER_IMPERSONATE_NAME privilege |
+
+Tests:
+
+|                                | Host running a service    | LocalSystem running a service |  Host running interactively | Host running interactively via ssh |
+| ------------------------------ | ------------------------- | ----------------------------- |  -------------------------- | ---------------------------------- |
+| Host: A, PA; Target: U         | :white_check_mark: Sucess | :white_check_mark: Sucess     | :white_check_mark: Sucess   | :white_check_mark: Sucess          |
+| Host: U; Target: U             | Note1 | N/A | Note2 - SetUserObjectSecurity: Error 1307 - This security ID may not be assigned as the owner of this object | CreateEnvironmentBlock: Error 5 - Access denied. |
+| Host: U,PT; Target: U          | Note1 | N/A | Note2 - SetUserObjectSecurity: Error 1307 - This security ID may not be assigned as the owner of this object | CreateEnvironmentBlock: Error 5 - Access denied. |
+| Host: U,PA; Target: U          | Note1 | N/A | Note2 - SetUserObjectSecurity: Error 1307 - This security ID may not be assigned as the owner of this object | CreateEnvironmentBlock: Error 5 - Access denied. |
+| Host: U,PA,PT; Target: U       | Note1 | N/A | Note2 - SetUserObjectSecurity: Error 1307 - This security ID may not be assigned as the owner of this object | CreateEnvironmentBlock: Error 5 - Access denied. |
+| Host: U,PA,PT,PD; Target: U    | Note1 | N/A | Note2 - SetUserObjectSecurity: Error 1307 - This security ID may not be assigned as the owner of this object | CreateEnvironmentBlock: Error 5 - Access denied. |
+
+* Note1 - Getting an error likely related to the Python install w.r.t. the service. Error: "Incorrect function"
+* Note2 - SetUserObjectSecurity is part of the hack to set the ACL of the Window Station & Desktop ACL. This 
+  error is encountered when trying to set the ACL for the Window Station (which is what we try to set first)

@@ -6,7 +6,8 @@ from subprocess import (
     PIPE,
     STDOUT,
     CREATE_NEW_PROCESS_GROUP,
-    CREATE_NEW_CONSOLE
+    CREATE_NEW_CONSOLE,
+    CREATE_NO_WINDOW
 )
 from typing import Any, Optional
 import logging

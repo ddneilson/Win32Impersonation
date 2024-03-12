@@ -1,4 +1,4 @@
-from subproc_test2 import run
+from subproc_test_token import run
 import logging
 
 logger = logging.getLogger()
